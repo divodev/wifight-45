@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiFight Login Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-box {
+            background: #f9f9f9;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+        button {
+            background: #4F46E5;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #4338CA;
+        }
+        .success {
+            color: green;
+            background: #d4edda;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .error {
+            color: red;
+            background: #f8d7da;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        input {
+            padding: 8px;
+            margin: 5px 0;
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 WiFight Complete Login Test</h1>
+
+    <div class="test-box">
+        <h2>Step 1: Test API Connectivity</h2>
+        <button onclick="testAPI()">Test Health API</button>
+        <div id="apiResult"></div>
+    </div>
+
+    <div class="test-box">
+        <h2>Step 2: Test Login Endpoint</h2>
+        <label>Email:</label>
+        <input type="email" id="testEmail" value="admin@wifight.com">
+        <label>Password:</label>
+        <input type="password" id="testPassword" value="admin123">
+        <button onclick="testLogin()">Test Login</button>
+        <div id="loginResult"></div>
+    </div>
+
+    <div class="test-box">
+        <h2>Step 3: Test Token Validation</h2>
+        <button onclick="testToken()">Validate Token</button>
+        <div id="tokenResult"></div>
+    </div>
+
+    <div class="test-box">
+        <h2>Step 4: Go to Dashboard</h2>
+        <button onclick="goToDashboard()">Open Dashboard</button>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin + '/backend/api';
+        let currentToken = null;
+
+        async function testAPI() {
+            const resultDiv = document.getElementById('apiResult');
+            resultDiv.innerHTML = '<p>Testing...</p>';
+
+            try {
+                const response = await fetch(API_BASE + '/health.php');
+                const data = await response.json();
+
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        ✓ API is reachable!
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        ✗ API Error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        async function testLogin() {
+            const resultDiv = document.getElementById('loginResult');
+            const email = document.getElementById('testEmail').value;
+            const password = document.getElementById('testPassword').value;
+
+            resultDiv.innerHTML = '<p>Logging in...</p>';
+
+            try {
+                const response = await fetch(API_BASE + '/auth/login.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const text = await response.text();
+                console.log('Raw response:', text);
+
+                const data = JSON.parse(text);
+
+                if (data.success) {
+                    currentToken = data.data.token;
+                    localStorage.setItem('wifight_token', currentToken);
+                    localStorage.setItem('wifight_user', JSON.stringify(data.data.user));
+
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✓ Login successful!
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                            <p><strong>Token saved to localStorage</strong></p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            ✗ Login failed: ${data.message}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        ✗ Error: ${error.message}
+                        <p>Check browser console for details</p>
+                    </div>
+                `;
+                console.error('Login error:', error);
+            }
+        }
+
+        function testToken() {
+            const resultDiv = document.getElementById('tokenResult');
+            const token = localStorage.getItem('wifight_token');
+
+            if (!token) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        ✗ No token found. Please login first.
+                    </div>
+                `;
+                return;
+            }
+
+            try {
+                const parts = token.split('.');
+                if (parts.length !== 3) {
+                    throw new Error('Invalid token format');
+                }
+
+                const payload = JSON.parse(atob(parts[1]));
+                const now = Math.floor(Date.now() / 1000);
+                const isExpired = payload.exp < now;
+
+                resultDiv.innerHTML = `
+                    <div class="${isExpired ? 'error' : 'success'}">
+                        ${isExpired ? '✗ Token is expired' : '✓ Token is valid'}
+                        <pre>${JSON.stringify(payload, null, 2)}</pre>
+                        <p>Expires: ${new Date(payload.exp * 1000).toLocaleString()}</p>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        ✗ Error decoding token: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        function goToDashboard() {
+            const token = localStorage.getItem('wifight_token');
+            if (!token) {
+                alert('Please login first');
+                return;
+            }
+            window.location.href = '../frontend/index.html';
+        }
+
+        // Auto-test on load
+        window.onload = function() {
+            console.log('API Base URL:', API_BASE);
+            testAPI();
+        };
+    </script>
+</body>
+</html>
